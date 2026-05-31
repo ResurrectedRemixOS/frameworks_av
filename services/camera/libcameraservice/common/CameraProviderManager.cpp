@@ -545,6 +545,12 @@ status_t CameraProviderManager::getCameraCharacteristics(const std::string &id,
     return getCameraCharacteristicsLocked(id, overrideForPerfClass, characteristics, compatInfo);
 }
 
+status_t CameraProviderManager::getCameraCharacteristics(const std::string &id,
+        bool overrideForPerfClass, CameraMetadata* characteristics, int /*unused*/) const {
+    return getCameraCharacteristics(id, overrideForPerfClass, characteristics,
+            CameraCompatibilityInfo());
+}
+
 status_t CameraProviderManager::getHighestSupportedVersion(const std::string &id,
         hardware::hidl_version *v, IPCTransport *transport) {
     if (v == nullptr || transport == nullptr) {

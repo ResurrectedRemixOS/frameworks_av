@@ -89,6 +89,7 @@
 #include "utils/SessionConfigurationUtils.h"
 #include "utils/TagMonitor.h"
 #include "utils/Utils.h"
+#include "ext/include/CameraServiceExtFactory.h"
 
 namespace {
     const char* kActivityServiceName = "activity";
@@ -4120,6 +4121,7 @@ void CameraService::logServiceError(const std::string &msg, int errorCode) {
 status_t CameraService::onTransact(uint32_t code, const Parcel& data, Parcel* reply,
         uint32_t flags) {
 
+    ALOGI("CameraService::onTransact: code=0x%x (%d)", code, code);
     // Permission checks
     switch (code) {
         case SHELL_COMMAND_TRANSACTION: {
@@ -4146,6 +4148,11 @@ status_t CameraService::onTransact(uint32_t code, const Parcel& data, Parcel* re
             }
             return NO_ERROR;
         }
+    }
+
+    // OnePlus camera extension (zoom UI event 10015). Unhandled codes fall through.
+    if (CameraServiceExtFactory::onTransact(code, data, reply, flags) == 0) {
+        return NO_ERROR;
     }
 
     return BnCameraService::onTransact(code, data, reply, flags);

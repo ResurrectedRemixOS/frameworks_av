@@ -316,6 +316,9 @@ public:
     status_t getCameraCharacteristics(const std::string &id,
             bool overrideForPerfClass, CameraMetadata* characteristics,
             const CameraCompatibilityInfo& compatInfo) const;
+    // OxygenOS libcsextimpl calls the four-argument form.
+    status_t getCameraCharacteristics(const std::string &id, bool overrideForPerfClass,
+            CameraMetadata* characteristics, int) const;
 
     status_t isConcurrentSessionConfigurationSupported(
             const std::vector<hardware::camera2::utils::CameraIdAndSessionConfiguration>
