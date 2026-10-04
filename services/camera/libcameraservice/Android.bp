@@ -241,6 +241,10 @@ cc_library {
 
     export_include_dirs: ["."],
 
+    // libcsextimpl imports fmt::v11; the platform ships v12. It already NEEDs
+    // libcameraservice, so carry the compat symbols here where it can see them.
+    whole_static_libs: ["libfmt11compat"],
+
     cflags: [
         "-Wall",
         "-Wextra",

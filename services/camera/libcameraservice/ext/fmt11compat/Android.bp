@@ -1,0 +1,12 @@
+cc_library_static {
+    name: "libfmt11compat",
+    srcs: ["fmt11compat.cpp"],
+    include_dirs: [
+        "external/fmtlib",
+        "external/fmtlib/include",
+    ],
+    cflags: [
+        "-fno-exceptions",
+        "-UNDEBUG",
+    ],
+}
