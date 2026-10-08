@@ -1201,8 +1201,12 @@ void collectAndRemovePendingOutputBuffers(bool useHalBufManager,
         sp<NotificationListener> listener, InFlightRequest& request,
         SessionStatsBuilder& sessionStatsBuilder,
         std::vector<BufferToReturn> *returnableBuffers) {
+    // Oplus still-capture brackets (front portrait, TurboHDR) deliver
+    // non-monotonic frames without ANDROID_CONTROL_ENABLE_ZSL. The monotonic
+    // guard would mark those frames as errors and APS would never finish the
+    // photo. Snapshot buffers do not need monotonic timestamps.
     bool timestampIncreasing =
-            !((request.zslCapture && request.stillCapture) || request.hasInputBuffer);
+            !(request.stillCapture || request.hasInputBuffer);
     nsecs_t readoutTimestamp = request.resultExtras.hasReadoutTimestamp ?
             request.resultExtras.readoutTimestamp : 0;
     collectReturnableOutputBuffers(useHalBufManager, halBufferManagedStreams, listener,
