@@ -38,6 +38,7 @@
 #include <aidl/AidlCameraService.h>
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android/companion/virtualnative/IVirtualDeviceManagerNative.h>
 #include <binder/ActivityManager.h>
@@ -187,6 +188,10 @@ constexpr int32_t kInvalidDeviceId = -1;
 
 // Set to keep track of logged service error events.
 static std::set<std::string> sServiceErrorEventSet;
+
+// Package name of the client currently connecting. The Oplus HAL reads this
+// back from the com.oplus.packageName vendor tag during configureStreams.
+static std::string sCurrPackageName;
 
 CameraService::CameraService(
         std::shared_ptr<CameraServiceProxyWrapper> cameraServiceProxyWrapper,
@@ -1560,6 +1565,10 @@ Status CameraService::filterGetInfoErrorCode(status_t err) {
     }
 }
 
+std::string CameraService::getCurrPackageName() {
+    return sCurrPackageName;
+}
+
 Status CameraService::makeClient(
         const sp<CameraService>& cameraService, const sp<IInterface>& cameraCb,
         const AttributionSourceState& clientAttribution, int callingPid, bool systemNativeClient,
@@ -1970,6 +1979,14 @@ status_t CameraService::checkIfDeviceIsUsable(const std::string& cameraId) const
     return NO_ERROR;
 }
 
+bool isPrivilegedClient(const std::string &packageName) {
+    std::vector<std::string> privilegedClientList = android::base::Split(
+            android::base::GetProperty("persist.vendor.camera.privapp.list", ""), ",");
+    auto it = std::find(privilegedClientList.begin(), privilegedClientList.end(),
+            packageName);
+    return it != privilegedClientList.end();
+}
+
 void CameraService::finishConnectLocked(const sp<BasicClient>& client,
         const CameraService::DescriptorPtr& desc, int oomScoreOffset, bool systemNativeClient) {
 
@@ -1978,6 +1995,10 @@ void CameraService::finishConnectLocked(const sp<BasicClient>& client,
             CameraService::CameraClientManager::makeClientDescriptor(client, desc,
                     oomScoreOffset, systemNativeClient);
     auto evicted = mActiveClientManager.addAndEvict(clientDescriptor);
+
+    if (isPrivilegedClient(client->getPackageName())) {
+        evicted.clear();
+    }
 
     logConnected(desc->getKey(), static_cast<int>(desc->getOwnerId()),
             client->getPackageName());
@@ -2123,6 +2144,35 @@ status_t CameraService::handleEvictionsLocked(const std::string& cameraId, int c
 
         // Find clients that would be evicted
         auto evicted = mActiveClientManager.wouldEvict(clientDescriptor);
+
+        if (isPrivilegedClient(packageName)) {
+            evicted.clear();
+        }
+
+        // Camera IDs 0 and 2 share the rear main sensor. The HAL declares
+        // 0 conflicts with 2, but not 2 conflicts with 0. Opening camera 2
+        // while camera 0 is still live deadlocks the provider. Evict the peer
+        // after the privileged-client clear, or that clear drops the peer.
+        {
+            std::string conflictPeer;
+            if (cameraId == "2") conflictPeer = "0";
+            else if (cameraId == "0") conflictPeer = "2";
+
+            if (!conflictPeer.empty()) {
+                auto peerClient = mActiveClientManager.get(conflictPeer);
+                if (peerClient != nullptr && peerClient->getValue() != nullptr) {
+                    if (std::find(evicted.begin(), evicted.end(), peerClient) == evicted.end()) {
+                        ALOGE("Force-evicting camera %s client %s (PID %" PRId32
+                              ") — asymmetric conflict with camera %s",
+                              conflictPeer.c_str(),
+                              peerClient->getValue()->getPackageName().c_str(),
+                              peerClient->getOwnerId(),
+                              cameraId.c_str());
+                        evicted.push_back(peerClient);
+                    }
+                }
+            }
+        }
 
         // If the incoming client was 'evicted,' higher priority clients have the camera in the
         // background, so we cannot do evictions
@@ -2579,6 +2629,8 @@ Status CameraService::connectHelper(const sp<CALLBACK>& cameraCb, const std::str
 
     const std::string clientPackageName =
             clientAttribution.packageName.value_or(kUnknownPackageName);
+
+    sCurrPackageName = clientPackageName;
 
     {
         // Acquire mServiceLock and prevent other clients from connecting

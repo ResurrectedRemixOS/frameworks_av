@@ -250,7 +250,10 @@ cc_library {
         "-Wextra",
         "-Werror",
         "-Wno-ignored-qualifiers",
-    ] + select(soong_config_variable("camera", "allow_nonincreasing_timestamps"), {
+    ] + select(soong_config_variable("camera", "package_name"), {
+        any @ flag_val: ["-DCAMERA_PACKAGE_NAME=\"" + flag_val + "\""],
+        default: [],
+    }) + select(soong_config_variable("camera", "allow_nonincreasing_timestamps"), {
         any @ value: ["-DALLOW_NONINCREASING_TIMESTAMPS"],
         default: [],
     }),
