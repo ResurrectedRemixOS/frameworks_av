@@ -21,6 +21,7 @@ private:
     static void* sFactoryObject;    // getExtFactoryImpl() result; its first word is a vptr
     static void* sExtObject;        // factory->vtable[0](factory)
     static int (*sOnTransactFunc)(void*, uint32_t, const Parcel&, Parcel*, uint32_t);
+    static void* (*sGetCameraServiceExtFunc)(void*);
 };
 
 } // namespace android

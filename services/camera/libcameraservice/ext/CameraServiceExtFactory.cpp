@@ -8,6 +8,7 @@ namespace android {
 void* CameraServiceExtFactory::sFactoryObject = nullptr;
 void* CameraServiceExtFactory::sExtObject = nullptr;
 int (*CameraServiceExtFactory::sOnTransactFunc)(void*, uint32_t, const Parcel&, Parcel*, uint32_t) = nullptr;
+void* (*CameraServiceExtFactory::sGetCameraServiceExtFunc)(void*) = nullptr;
 
 namespace {
 
@@ -71,6 +72,12 @@ void CameraServiceExtFactory::ensureLoaded() {
     } else {
         ALOGI("CameraServiceExtFactory: onTransact found at %p", sOnTransactFunc);
     }
+
+    sGetCameraServiceExtFunc = (void* (*)(void*))
+        dlsym(handle, "_ZN7android10ExtFactory19getCameraServiceExtEv");
+    if (sGetCameraServiceExtFunc == nullptr) {
+        ALOGW("CameraServiceExtFactory: dlsym getCameraServiceExt failed: %s", dlerror());
+    }
 }
 
 void* CameraServiceExtFactory::getInstance() {
@@ -94,15 +101,19 @@ int CameraServiceExtFactory::onTransact(uint32_t code, const Parcel& data, Parce
         }
 
         if (sExtObject == nullptr) {
-            // factory->vtable[0](factory) -- a virtual member function, so the
-            // factory itself has to be passed as 'this'.
-            void* const* vtable = *reinterpret_cast<void* const* const*>(sFactoryObject);
-            if (vtable == nullptr || vtable[0] == nullptr) {
-                ALOGE("CameraServiceExtFactory: factory has no vtable slot 0");
-                return -1;
-            }
             typedef void* (*GetExtObjectFunc)(void*);
-            sExtObject = reinterpret_cast<GetExtObjectFunc>(vtable[0])(sFactoryObject);
+            GetExtObjectFunc getExt = sGetCameraServiceExtFunc;
+            if (getExt == nullptr) {
+                // factory->vtable[0](factory) -- a virtual member function, so the
+                // factory itself has to be passed as 'this'.
+                void* const* vtable = *reinterpret_cast<void* const* const*>(sFactoryObject);
+                if (vtable == nullptr || vtable[0] == nullptr) {
+                    ALOGE("CameraServiceExtFactory: factory has no vtable slot 0");
+                    return -1;
+                }
+                getExt = reinterpret_cast<GetExtObjectFunc>(vtable[0]);
+            }
+            sExtObject = getExt(sFactoryObject);
             if (sExtObject == nullptr) {
                 ALOGE("CameraServiceExtFactory: factory returned null");
                 return -1;
